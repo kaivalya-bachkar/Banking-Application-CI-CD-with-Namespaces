@@ -1,0 +1,82 @@
+trigger: none 
+
+pool:
+  name: 'Default' 
+
+parameters:
+  - name: action
+    displayName: 'Terraform Action'
+    type: string
+    default: 'plan'
+    values:
+      - plan
+      - apply
+      - destroy
+
+variables:
+  - name: azureServiceConnection
+    value: 'Banking-App-Service-Connection'
+
+stages:
+
+- stage: TerraformPlan
+  displayName: 'Stage 1: Init & Plan'
+  jobs:
+  - job: PlanJob
+    displayName: 'Plan Infrastructure'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Execute Terraform Init & Plan'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          set -e 
+          cd infrastructure
+          
+          echo " REQUESTED ACTION: ${{ parameters.action }}"
+          
+          echo "--- INITIALIZING TERRAFORM ---"
+          terraform init -backend-config="environments/dev/dev-backend.conf" -reconfigure
+          
+          echo "--- RUNNING TERRAFORM PLAN ---"
+          if [ "${{ parameters.action }}" == "destroy" ]; then
+            terraform plan -destroy -var-file="environments/dev/dev.tfvars"
+          else
+            terraform plan -var-file="environments/dev/dev.tfvars"
+          fi
+
+- stage: TerraformExecute
+  displayName: 'Stage 2: Execute ${{ parameters.action }}'
+  dependsOn: TerraformPlan
+  condition: and(succeeded(), ne('${{ parameters.action }}', 'plan'))
+  jobs:
+  - deployment: ExecuteJob
+    displayName: 'Execute Action on Dev'
+    environment: 'infra-dev' 
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self 
+          - task: AzureCLI@2
+            displayName: 'Execute Terraform ${{ parameters.action }}'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e 
+                cd infrastructure
+                
+                echo "--- RE-INITIALIZING TERRAFORM (Required after fresh checkout) ---"
+                terraform init -backend-config="environments/dev/dev-backend.conf"
+                
+                echo "--- EXECUTING APPROVED TERRAFORM ACTION ---"
+                if [ "${{ parameters.action }}" == "apply" ]; then
+                  terraform apply -var-file="environments/dev/dev.tfvars" -auto-approve
+                  
+                elif [ "${{ parameters.action }}" == "destroy" ]; then
+                  terraform destroy -var-file="environments/dev/dev.tfvars" -auto-approve
+                fi

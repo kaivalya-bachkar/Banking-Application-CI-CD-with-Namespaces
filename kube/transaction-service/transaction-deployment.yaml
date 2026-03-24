@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transaction-service
+spec:
+  replicas: 1
+  
+  # strategy:
+  #   type: RollingUpdate
+  #   rollingUpdate:
+  #     maxSurge: 1       
+  #     maxUnavailable: 0 
+      
+  selector:
+    matchLabels:
+      app: transaction-service
+  template:
+    metadata:
+      labels:
+        app: transaction-service
+    spec:
+      containers:
+      - name: transaction-service
+        image: __IMAGE__
+        ports:
+        - containerPort: 5003 
+        env:
+        - name: DB_HOST
+          value: "__DB_HOST__" 
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USER
+          value: "postgres"
+        - name: DB_PASSWORD
+          value: "__DB_PASSWORD__" 
+        - name: DB_NAME
+          value: "__DB_NAME__" 
+        - name: ACCOUNT_SERVICE_URL
+          value: "http://account-service" 
+        - name: NOTIFICATION_SERVICE_URL
+          value: "http://notification-service" 
+          
+        # resources:
+        #   requests:
+        #     cpu: "50m"      
+        #     memory: "128Mi" 
+        #   limits:
+        #     cpu: "500m"     
+        #     memory: "512Mi" 
+
+        # readinessProbe:
+        #   httpGet:
+        #     path: /health/ready
+        #     port: 5003
+        #   initialDelaySeconds: 10
+        #   periodSeconds: 5
+        # livenessProbe:
+        #   httpGet:
+        #     path: /health/live
+        #     port: 5003
+        #   initialDelaySeconds: 15
+        #   periodSeconds: 15
